@@ -1,3 +1,29 @@
+// copied from learn code academy youtube videos (Modular js 4 pubsub js design pattern + vid 5)
+let events = {
+  events: {},
+  on: function (eventName, fn) {
+    this.events[eventName] = this.events[eventName] || [];
+    this.events[eventName].push(fn);
+  },
+  off: function (eventName, fn) {
+    if (this.events[eventName]) {
+      for (let i = 0; i< this.events[eventName].length; i++){
+        if (this.events[eventName][i] === fn) {
+          this.events[eventName].splice(i, 1);
+          break;
+        }
+      }
+    }
+  },
+  emit: function(eventName, data){
+    if(this.events[eventName]){
+      this.events[eventName].forEach(function(fn) {
+        fn(data);
+      });
+    }
+  }
+}
+
 const gameboard = (function() {
   let board = [
     [0, 0, 0],
@@ -71,10 +97,10 @@ const game = (function(gameboard) {
 
   let player_ones_turn = true;
 
-  const playerOnesTurn = () => player_ones_turn;
+  const changePlayersTurn = () => player_ones_turn = !player_ones_turn;
 
   const playRound = function(row, col) {
-    if (!gameboard.isCellEmpty()){
+    if (!gameboard.isCellEmpty(row, col)){
       console.log("cell isn't empty, try again");
       return;
     }
@@ -93,15 +119,18 @@ const game = (function(gameboard) {
       }
     }
 
-    player_ones_turn = !player_ones_turn;
+    changePlayersTurn();
+    events.emit("playerChanged", player_ones_turn);
   }
   
-  return {playRound, playerOnesTurn}
+  return {playRound, changePlayersTurn}
 })(gameboard);
 
 const ScreenController = (function() {
   const drawBoard = function(board) {
+    // todo delete old board from screen
     let boardContainer = document.querySelector(".board");
+    boardContainer.innerHTML = "";
 
     for(let i = 0; i < board.length; i++){
       let row = document.createElement("div");
@@ -117,7 +146,19 @@ const ScreenController = (function() {
     }
   }
 
-  return { drawBoard };
+  const updatePlayer = (function (player_ones_turn) {
+    let player_div = document.querySelector(".player-info");
+    if (player_ones_turn){
+      player_div.textContent = "It is Player One's turn";
+    }
+    else {
+      player_div.textContent = "It is Player two's turn";
+    }
+  })
+  events.on("playerChanged", updatePlayer);
+
+  return { drawBoard, updatePlayer };
 })();
 
 ScreenController.drawBoard(gameboard.viewBoard());
+ScreenController.updatePlayer(true);
