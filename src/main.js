@@ -80,6 +80,16 @@ const gameboard = (function() {
     } 
   }
 
+  const checkTie = function () {
+    for (let i = 0; i < board[0].length; i++){
+      for (let j = 0; j < board.length; j++){
+        if(isCellEmpty(i, j))
+          return false
+      } 
+    }
+    return true;
+  }
+
   const clearBoard = () => {
     board = [
       [0, 0, 0],
@@ -88,16 +98,20 @@ const gameboard = (function() {
     ];
   }
 
-  return { setCell, viewBoard, checkWin, clearBoard, isCellEmpty };
+  return { setCell, viewBoard, checkWin, clearBoard, isCellEmpty, checkTie};
 })();
 
 const game = (function(gameboard) {
   let player_one_mark = "X"
   let player_two_mark = "O"
+  let winner;
 
   let player_ones_turn = true;
 
+  const setWinner = () => winner = true;
+  const getWinner = () => winner;
   const changePlayersTurn = () => player_ones_turn = !player_ones_turn;
+  const getCurrentPlayer = () => player_ones_turn;
 
   const playRound = function(row, col) {
     if (!gameboard.isCellEmpty(row, col)){
@@ -107,58 +121,108 @@ const game = (function(gameboard) {
     if(player_ones_turn){
       gameboard.setCell(row, col, player_one_mark)
       if (gameboard.checkWin(player_one_mark)){
-        console.log("player one wins!");
+        events.emit("gameWon", player_ones_turn);
         gameboard.clearBoard();
       }
     }
     else{
       gameboard.setCell(row, col, player_two_mark)
       if (gameboard.checkWin(player_two_mark)){
-        console.log("player two wins!");
+        events.emit("gameWon", player_ones_turn);
         gameboard.clearBoard();
       }
     }
 
+    if(gameboard.checkTie()){
+      alert('TIE');
+      gameboard.clearBoard();
+      return;
+    }
     changePlayersTurn();
+    ScreenController.drawBoard(gameboard.viewBoard());
     events.emit("playerChanged", player_ones_turn);
   }
   
-  return {playRound, changePlayersTurn}
+  return {playRound, changePlayersTurn, getCurrentPlayer, getWinner}
 })(gameboard);
 
-const ScreenController = (function() {
+const ScreenController = (function(gameboard, game) {
+  let player_ones_name = "player one";
+  let player_twos_name = "player two";
+
+  const setNames = function (name1, name2){
+    player_ones_name = name1;
+    player_twos_name = name2;
+  }
+
+  const setWinner = function (player_one_winner) {
+    let winner_element = document.querySelector("#winner");
+    if (player_one_winner)
+      winner_element.textContent = player_ones_name + " is the winner";
+    else
+      winner_element.textContent = player_twos_name + " is the winner";
+  }
+
+  const namesSubmission = function (){
+    let submission_button = document.querySelector("#names-submission");
+    submission_button.addEventListener("click", () => {
+      let player_one_name_input = document.querySelector("#player-one");
+      let player_two_name_input = document.querySelector("#player-two");
+      setNames(player_one_name_input.value, player_two_name_input.value);
+      startGame();
+    });
+  }
+
+  const startGame = function() {
+    gameboard.clearBoard();
+    ScreenController.drawBoard(gameboard.viewBoard());
+    ScreenController.updatePlayer(true);
+    ScreenController.addCellListeners();
+    events.on("playerChanged", ScreenController.updatePlayer);
+    events.on("gameWon", ScreenController.setWinner);
+    events.on("playerChanged", ScreenController.addCellListeners);
+  }
+
+  const addCellListeners = function (){
+    let cells = document.querySelectorAll(".cell");
+    cells.forEach((cell) => cell.addEventListener("click", () => game.playRound(cell.dataset.rowNumber, cell.dataset.colNumber)))
+  }
+
   const drawBoard = function(board) {
-    // todo delete old board from screen
     let boardContainer = document.querySelector(".board");
     boardContainer.innerHTML = "";
 
     for(let i = 0; i < board.length; i++){
       let row = document.createElement("div");
+      row.dataset.rowNumber = i;
       row.classList.add("row")
       for(let j = 0; j < board.length; j++){
         let col = document.createElement("button");
-        col.classList.add("col");
+        col.classList.add("cell");
+        col.dataset.rowNumber = i;
+        col.dataset.colNumber = j;
         if(board[i][j])
           col.textContent = board[i][j];
         row.appendChild(col);
       }
-      boardContainer.appendChild(row);
+      boardContainer.appendChild(row)
     }
   }
+
 
   const updatePlayer = (function (player_ones_turn) {
     let player_div = document.querySelector(".player-info");
     if (player_ones_turn){
-      player_div.textContent = "It is Player One's turn";
+      player_div.textContent = `It is ${player_ones_name}'s turn`;
     }
     else {
-      player_div.textContent = "It is Player two's turn";
+      player_div.textContent = `It is ${player_twos_name}'s turn`;
     }
   })
-  events.on("playerChanged", updatePlayer);
 
-  return { drawBoard, updatePlayer };
-})();
+  return { drawBoard, updatePlayer, addCellListeners, namesSubmission, setWinner};
+})(gameboard, game);
 
-ScreenController.drawBoard(gameboard.viewBoard());
-ScreenController.updatePlayer(true);
+
+
+ScreenController.namesSubmission();
